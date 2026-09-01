@@ -67,7 +67,7 @@ object Scheduler {
             .setMinimumLatency(delayMs)
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
             .setBackoffCriteria(30_000L, JobInfo.BACKOFF_POLICY_EXPONENTIAL)
-            .setTransientExtras(android.os.PersistableBundle().apply { putString(EXTRA_SOURCE, source) })
+            .setTransientExtras(android.os.Bundle().apply { putString(EXTRA_SOURCE, source) })
             .build()
         scheduler.schedule(job)
     }
