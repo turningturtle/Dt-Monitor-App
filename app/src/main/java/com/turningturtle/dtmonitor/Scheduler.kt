@@ -22,6 +22,7 @@ object Scheduler {
     private const val CHECK_JOB_B = 7412
     private const val NETWORK_REQUEST_CODE = 7411
     private const val INTERVAL_MS = 10L * 60L * 1000L
+    private const val RECENT_CHECK_GUARD_MS = 90_000L
     const val EXTRA_SOURCE = "source"
     const val SOURCE_TIMER = "background timer"
     const val SOURCE_NETWORK = "internet connected"
@@ -31,8 +32,9 @@ object Scheduler {
         val scheduler = appContext.getSystemService(JobScheduler::class.java)
         val a = scheduler?.getPendingJob(CHECK_JOB_A)
         val b = scheduler?.getPendingJob(CHECK_JOB_B)
-        if (a == null && b == null) {
-            scheduleNew(context, CHECK_JOB_A, INTERVAL_MS, SOURCE_TIMER)
+        val recent = System.currentTimeMillis() - MonitorPrefs.lastCheck(appContext) < RECENT_CHECK_GUARD_MS
+        if (a == null && b == null && !recent) {
+            scheduleNew(appContext, CHECK_JOB_A, INTERVAL_MS, SOURCE_TIMER)
         }
         ensureNetworkWatcher(appContext)
     }
@@ -42,7 +44,7 @@ object Scheduler {
         val scheduler = context.getSystemService(JobScheduler::class.java) ?: return
         scheduler.cancel(CHECK_JOB_A)
         scheduler.cancel(CHECK_JOB_B)
-        scheduleNew(context, CHECK_JOB_A, INTERVAL_MS, SOURCE_TIMER)
+        scheduleNew(context.applicationContext, CHECK_JOB_A, INTERVAL_MS, SOURCE_TIMER)
     }
 
     /** Used by a running job: schedule the successor on the other job ID. */
@@ -50,14 +52,14 @@ object Scheduler {
         val nextId = if (currentJobId == CHECK_JOB_A) CHECK_JOB_B else CHECK_JOB_A
         val scheduler = context.getSystemService(JobScheduler::class.java) ?: return
         scheduler.cancel(nextId)
-        scheduleNew(context, nextId, INTERVAL_MS, SOURCE_TIMER)
+        scheduleNew(context.applicationContext, nextId, INTERVAL_MS, SOURCE_TIMER)
     }
 
     fun scheduleImmediateCheck(context: Context) {
         val scheduler = context.getSystemService(JobScheduler::class.java) ?: return
         scheduler.cancel(CHECK_JOB_A)
         scheduler.cancel(CHECK_JOB_B)
-        scheduleNew(context, CHECK_JOB_A, 0L, SOURCE_NETWORK)
+        scheduleNew(context.applicationContext, CHECK_JOB_A, 0L, SOURCE_NETWORK)
     }
 
     private fun scheduleNew(context: Context, jobId: Int, delayMs: Long, source: String) {
