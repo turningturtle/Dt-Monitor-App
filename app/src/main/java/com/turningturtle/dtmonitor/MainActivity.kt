@@ -53,7 +53,6 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         refreshLastState()
-        Scheduler.schedule(this)
     }
 
     private fun loadSettings() {
