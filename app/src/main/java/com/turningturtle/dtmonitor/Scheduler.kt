@@ -1,7 +1,7 @@
 package com.turningturtle.dtmonitor
 
-import android.app.JobInfo
-import android.app.JobScheduler
+import android.app.job.JobInfo
+import android.app.job.JobScheduler
 import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
@@ -39,7 +39,6 @@ object Scheduler {
         ensureNetworkWatcher(appContext)
     }
 
-    /** Used by UI/manual actions: replace any pending timer with a fresh 10-minute timer. */
     fun scheduleNext(context: Context) {
         val scheduler = context.getSystemService(JobScheduler::class.java) ?: return
         scheduler.cancel(CHECK_JOB_A)
@@ -47,7 +46,6 @@ object Scheduler {
         scheduleNew(context.applicationContext, CHECK_JOB_A, INTERVAL_MS, SOURCE_TIMER)
     }
 
-    /** Used by a running job: schedule the successor on the other job ID. */
     fun scheduleNext(context: Context, currentJobId: Int) {
         val nextId = if (currentJobId == CHECK_JOB_A) CHECK_JOB_B else CHECK_JOB_A
         val scheduler = context.getSystemService(JobScheduler::class.java) ?: return
