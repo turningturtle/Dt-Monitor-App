@@ -17,8 +17,10 @@ class MainActivity : Activity() {
     private lateinit var webhookInput: EditText
     private lateinit var targetsInput: EditText
     private lateinit var recheckButton: Button
-    private lateinit var editButton: Button
-    private lateinit var saveButton: Button
+    private lateinit var editWebhookButton: Button
+    private lateinit var saveWebhookButton: Button
+    private lateinit var editTargetsButton: Button
+    private lateinit var saveTargetsButton: Button
     private val executor = Executors.newSingleThreadExecutor()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,16 +32,21 @@ class MainActivity : Activity() {
         webhookInput = findViewById(R.id.webhookInput)
         targetsInput = findViewById(R.id.targetsInput)
         recheckButton = findViewById(R.id.recheckButton)
-        editButton = findViewById(R.id.editButton)
-        saveButton = findViewById(R.id.saveButton)
+        editWebhookButton = findViewById(R.id.editWebhookButton)
+        saveWebhookButton = findViewById(R.id.saveWebhookButton)
+        editTargetsButton = findViewById(R.id.editTargetsButton)
+        saveTargetsButton = findViewById(R.id.saveTargetsButton)
 
         loadSettings()
-        setEditing(false)
+        setEditing(webhookInput, editWebhookButton, saveWebhookButton, false)
+        setEditing(targetsInput, editTargetsButton, saveTargetsButton, false)
         updateLastCheck()
         Scheduler.schedule(this)
 
-        editButton.setOnClickListener { setEditing(true) }
-        saveButton.setOnClickListener { saveSettings() }
+        editWebhookButton.setOnClickListener { setEditing(webhookInput, editWebhookButton, saveWebhookButton, true) }
+        saveWebhookButton.setOnClickListener { saveWebhook() }
+        editTargetsButton.setOnClickListener { setEditing(targetsInput, editTargetsButton, saveTargetsButton, true) }
+        saveTargetsButton.setOnClickListener { saveTargets() }
         recheckButton.setOnClickListener { runManualCheck() }
     }
 
@@ -48,27 +55,30 @@ class MainActivity : Activity() {
         targetsInput.setText(MonitorPrefs.loadTargets(this).joinToString("\n") { "${it.name},${it.id}" })
     }
 
-    private fun setEditing(editing: Boolean) {
-        webhookInput.isEnabled = editing
-        targetsInput.isEnabled = editing
-        editButton.visibility = if (editing) View.GONE else View.VISIBLE
-        saveButton.visibility = if (editing) View.VISIBLE else View.GONE
-        if (editing) webhookInput.requestFocus()
+    private fun setEditing(input: EditText, edit: Button, save: Button, editing: Boolean) {
+        input.isEnabled = editing
+        edit.visibility = if (editing) View.GONE else View.VISIBLE
+        save.visibility = if (editing) View.VISIBLE else View.GONE
     }
 
-    private fun saveSettings() {
-        val parsed = parseTargets(targetsInput.text.toString())
-        if (parsed.error != null) { resultText.text = parsed.error; return }
+    private fun saveWebhook() {
         val webhook = webhookInput.text.toString().trim()
         if (webhook.isNotEmpty() && !webhook.startsWith("https://discord.com/api/webhooks/") && !webhook.startsWith("https://discordapp.com/api/webhooks/")) {
-            resultText.text = "Webhook must be a Discord webhook URL."; return
+            resultText.text = "Webhook must be a Discord webhook URL."
+            return
         }
-        MonitorPrefs.saveTargets(this, parsed.targets)
         MonitorPrefs.saveWebhook(this, webhook)
+        resultText.text = "Webhook saved."
+        setEditing(webhookInput, editWebhookButton, saveWebhookButton, false)
+    }
+
+    private fun saveTargets() {
+        val parsed = parseTargets(targetsInput.text.toString())
+        if (parsed.error != null) { resultText.text = parsed.error; return }
+        MonitorPrefs.saveTargets(this, parsed.targets)
         Scheduler.schedule(this)
         resultText.text = "Saved ${parsed.targets.size} server${if (parsed.targets.size == 1) "" else "s"}. Background monitoring is enabled."
-        statusText.text = "● Monitoring"
-        setEditing(false)
+        setEditing(targetsInput, editTargetsButton, saveTargetsButton, false)
     }
 
     private fun runManualCheck() {
@@ -83,8 +93,10 @@ class MainActivity : Activity() {
 
     private fun setBusy(busy: Boolean) {
         recheckButton.isEnabled = !busy
-        editButton.isEnabled = !busy
-        saveButton.isEnabled = !busy
+        editWebhookButton.isEnabled = !busy
+        saveWebhookButton.isEnabled = !busy
+        editTargetsButton.isEnabled = !busy
+        saveTargetsButton.isEnabled = !busy
         statusText.text = if (busy) "● Checking…" else "● Monitoring"
     }
 
