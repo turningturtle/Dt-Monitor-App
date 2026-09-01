@@ -15,6 +15,7 @@ object DtMonitor {
     private const val SHARD_STALE_MS = 150L * 1000L
     private const val CONNECT_TIMEOUT = 10_000
     private const val READ_TIMEOUT = 10_000
+    private const val ALERT_USER_MENTION = "<@714579006871175279>"
     private val digits = Regex("\\d{15,22}")
     private val lock = Any()
 
@@ -109,16 +110,19 @@ object DtMonitor {
         val description = buildString {
             active.sortedBy { it.result.remainingMs }.take(25).forEach { item ->
                 val result = item.result; val expires = (now + result.remainingMs) / 1000L
-                append("• **${escapeMarkdown(item.target.name).take(80)}** — Shard ${result.shardId} • restarted <t:${result.startedAt!! / 1000}:R> • expires <t:$expires:R>\n")
+                append("• **${escapeMarkdown(item.target.name).take(80)}** — Shard ${result.shardId} • restarted <t:${result.startedAt!! / 1000}:R> • expires <t:$expires:R>\\n")
             }
-            if (active.size > 25) append("• …and ${active.size - 25} more.\n")
+            if (active.size > 25) append("• …and ${active.size - 25} more.\\n")
         }.trimEnd()
-        val root = JSONObject().put("embeds", JSONArray().put(JSONObject().apply {
-            put("title", "🎴 OwO Distorted Time Available")
-            put("description", description)
-            put("footer", JSONObject().put("text", "Found ${active.size} new DT server${if (active.size == 1) "" else "s"}."))
-            put("timestamp", Instant.ofEpochMilli(now).toString())
-        }))
+        val root = JSONObject()
+            .put("content", ALERT_USER_MENTION)
+            .put("allowed_mentions", JSONObject().put("users", JSONArray().put("714579006871175279")))
+            .put("embeds", JSONArray().put(JSONObject().apply {
+                put("title", "🎴 OwO Distorted Time Available")
+                put("description", description)
+                put("footer", JSONObject().put("text", "Found ${active.size} new DT server${if (active.size == 1) "" else "s"}."))
+                put("timestamp", Instant.ofEpochMilli(now).toString())
+            }))
         val connection = (URL(webhook).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"; connectTimeout = CONNECT_TIMEOUT; readTimeout = READ_TIMEOUT; doOutput = true
             setRequestProperty("Content-Type", "application/json"); setRequestProperty("User-Agent", "DT-Monitor/1.0")
