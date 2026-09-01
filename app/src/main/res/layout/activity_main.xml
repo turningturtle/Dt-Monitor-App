@@ -38,7 +38,7 @@
                 android:id="@+id/statusText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="● Ready to monitor"
+                android:text="● Monitoring"
                 android:textColor="#2F8F5B"
                 android:textSize="16sp"
                 android:textStyle="bold" />
@@ -168,7 +168,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
             android:layout_marginBottom="8dp"
-            android:text="Background checks are requested every 10 minutes. Android may defer them to save battery."
+            android:text="Checks are scheduled about every 10 minutes and also react when internet becomes available. Android may still defer background work to save battery."
             android:textColor="#777780"
             android:textSize="12sp" />
     </LinearLayout>
