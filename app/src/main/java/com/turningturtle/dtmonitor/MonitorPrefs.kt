@@ -8,7 +8,10 @@ object MonitorPrefs {
     private const val FILE = "dt_monitor"
     private const val TARGETS = "targets"
     private const val LAST_CHECK = "last_check"
+    private const val LAST_RESULT = "last_result"
+    private const val LAST_SOURCE = "last_source"
     private const val ALERTS = "alerts"
+    private const val BACKGROUND_CHECK_COOLDOWN_MS = 90_000L
 
     private fun prefs(context: Context) = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
@@ -35,8 +38,37 @@ object MonitorPrefs {
 
     fun webhook(context: Context): String = SecretStore.get(context)
     fun saveWebhook(context: Context, value: String) = SecretStore.put(context, value.trim())
-    fun setLastCheck(context: Context, millis: Long) = prefs(context).edit().putLong(LAST_CHECK, millis).apply()
+
+    fun setLastCheck(context: Context, millis: Long) =
+        prefs(context).edit().putLong(LAST_CHECK, millis).apply()
+
     fun lastCheck(context: Context): Long = prefs(context).getLong(LAST_CHECK, 0L)
+    fun lastResult(context: Context): String = prefs(context).getString(LAST_RESULT, "No check performed yet.") ?: "No check performed yet."
+    fun lastSource(context: Context): String = prefs(context).getString(LAST_SOURCE, "") ?: ""
+
+    /** Atomically prevents two background triggers from checking at the same time. */
+    @Synchronized fun tryAcquireBackgroundCheck(context: Context): Boolean {
+        val now = System.currentTimeMillis()
+        val previous = lastCheck(context)
+        if (previous != 0L && now - previous < BACKGROUND_CHECK_COOLDOWN_MS) return false
+        setLastCheck(context, now)
+        return true
+    }
+
+    fun recordOutcome(context: Context, outcome: CheckOutcome, source: String) {
+        val summary = when {
+            outcome.error != null -> outcome.error
+            outcome.active.isEmpty() ->
+                "Checked ${outcome.targetCount} server${if (outcome.targetCount == 1) "" else "s"}.\nNo active DT found. No webhook sent."
+            else ->
+                "${outcome.active.size} active DT server${if (outcome.active.size == 1) "" else "s"}.\nNew alerts sent: ${outcome.alertsSent}."
+        }
+        prefs(context).edit()
+            .putLong(LAST_CHECK, outcome.checkedAt)
+            .putString(LAST_RESULT, summary)
+            .putString(LAST_SOURCE, source)
+            .apply()
+    }
 
     @Synchronized fun wasAlerted(context: Context, targetId: String, eventKey: String): Boolean {
         val raw = prefs(context).getString(ALERTS, "{}") ?: "{}"
