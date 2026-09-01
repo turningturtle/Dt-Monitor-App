@@ -7,6 +7,7 @@ import java.util.concurrent.Executors
 class MonitorJobService : JobService() {
     override fun onStartJob(params: JobParameters): Boolean {
         val appContext = applicationContext
+        val source = params.transientExtras.getString(Scheduler.EXTRA_SOURCE) ?: Scheduler.SOURCE_TIMER
         executor.execute {
             if (MonitorPrefs.tryAcquireBackgroundCheck(appContext)) {
                 val outcome = try {
@@ -19,7 +20,7 @@ class MonitorJobService : JobService() {
                         e.message ?: "Background check failed."
                     )
                 }
-                MonitorPrefs.recordOutcome(appContext, outcome, "background timer")
+                MonitorPrefs.recordOutcome(appContext, outcome, source)
             }
 
             // Always replace the consumed one-shot job with the next 10-minute job.
