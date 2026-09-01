@@ -8,7 +8,6 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
 import java.time.format.DateTimeParseException
-import java.util.Locale
 
 object DtMonitor {
     private const val STATUS_URL = "https://owobot.com/api/status"
@@ -21,26 +20,23 @@ object DtMonitor {
 
     fun check(context: Context): CheckOutcome = synchronized(lock) {
         val started = System.currentTimeMillis()
+        MonitorPrefs.setLastCheck(context, started)
         val targets = MonitorPrefs.loadTargets(context)
         if (targets.isEmpty()) return@synchronized CheckOutcome(started, emptyList(), 0, "No servers configured.")
-        if (MonitorPrefs.webhook(context).isBlank()) return@synchronized CheckOutcome(started, emptyList(), targets.size, "Add a Discord webhook before checking.")
+        val webhook = MonitorPrefs.webhook(context)
+        if (webhook.isBlank()) return@synchronized CheckOutcome(started, emptyList(), targets.size, "Add a Discord webhook before checking.")
 
         val status = fetchStatus()
         val active = targets.mapNotNull { target ->
             val result = guildStatus(target.id, status, started)
             if (result.state == DtResult.State.ACTIVE) ActiveTarget(target, result) else null
         }
-
-        val newAlerts = active.filterNot { item ->
-            val event = eventKey(item.result)
-            MonitorPrefs.wasAlerted(context, item.target.id, event)
-        }
+        val newAlerts = active.filterNot { item -> MonitorPrefs.wasAlerted(context, item.target.id, eventKey(item.result)) }
 
         if (newAlerts.isNotEmpty()) {
-            postWebhook(MonitorPrefs.webhook(context), newAlerts, started)
+            postWebhook(webhook, newAlerts, started)
             MonitorPrefs.markAlerted(context, newAlerts.associate { it.target.id to eventKey(it.result) })
         }
-
         CheckOutcome(started, active, targets.size, null, newAlerts.size)
     }
 
@@ -48,11 +44,8 @@ object DtMonitor {
 
     private fun fetchStatus(): JSONArray {
         val connection = (URL(STATUS_URL).openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = CONNECT_TIMEOUT
-            readTimeout = READ_TIMEOUT
-            setRequestProperty("Accept", "application/json")
-            useCaches = false
+            requestMethod = "GET"; connectTimeout = CONNECT_TIMEOUT; readTimeout = READ_TIMEOUT
+            setRequestProperty("Accept", "application/json"); useCaches = false
         }
         return try {
             val code = connection.responseCode
@@ -78,13 +71,12 @@ object DtMonitor {
 
     private fun shardRecord(status: JSONArray, id: Int): JSONObject? {
         for (server in owoServers(status)) {
-            val min = server.optInt("min", Int.MAX_VALUE)
-            val max = server.optInt("max", Int.MIN_VALUE)
+            val min = server.optInt("min", Int.MAX_VALUE); val max = server.optInt("max", Int.MIN_VALUE)
             if (id !in min..max) continue
             val shards = server.optJSONArray("shards") ?: continue
             for (i in 0 until shards.length()) {
                 val shard = shards.optJSONObject(i) ?: continue
-                if (shard.optString("shard") == id.toString() || shard.optString("id") == id.toString()) return shard.put("__serverName", server.optString("name", "OwO"))
+                if (shard.optString("shard") == id.toString() || shard.optString("id") == id.toString()) return shard
             }
         }
         return null
@@ -114,30 +106,22 @@ object DtMonitor {
     }
 
     private fun postWebhook(webhook: String, active: List<ActiveTarget>, now: Long) {
-        val root = JSONObject()
         val description = buildString {
             active.sortedBy { it.result.remainingMs }.take(25).forEach { item ->
-                val result = item.result
-                val expires = (now + result.remainingMs) / 1000L
+                val result = item.result; val expires = (now + result.remainingMs) / 1000L
                 append("• **${escapeMarkdown(item.target.name).take(80)}** — Shard ${result.shardId} • restarted <t:${result.startedAt!! / 1000}:R> • expires <t:$expires:R>\n")
             }
             if (active.size > 25) append("• …and ${active.size - 25} more.\n")
         }.trimEnd()
-        val embed = JSONObject().apply {
+        val root = JSONObject().put("embeds", JSONArray().put(JSONObject().apply {
             put("title", "🎴 OwO Distorted Time Available")
             put("description", description)
             put("footer", JSONObject().put("text", "Found ${active.size} new DT server${if (active.size == 1) "" else "s"}."))
             put("timestamp", Instant.ofEpochMilli(now).toString())
-        }
-        root.put("embeds", JSONArray().put(embed))
-
+        }))
         val connection = (URL(webhook).openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            connectTimeout = CONNECT_TIMEOUT
-            readTimeout = READ_TIMEOUT
-            doOutput = true
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("User-Agent", "DT-Monitor/1.0")
+            requestMethod = "POST"; connectTimeout = CONNECT_TIMEOUT; readTimeout = READ_TIMEOUT; doOutput = true
+            setRequestProperty("Content-Type", "application/json"); setRequestProperty("User-Agent", "DT-Monitor/1.0")
         }
         try {
             connection.outputStream.use { it.write(root.toString().toByteArray(Charsets.UTF_8)) }
@@ -149,12 +133,5 @@ object DtMonitor {
     private fun escapeMarkdown(text: String): String = text.replace("\\", "\\\\").replace("*", "\\*").replace("_", "\\_").replace("`", "\\`")
 }
 
-data class CheckOutcome(
-    val checkedAt: Long,
-    val active: List<ActiveTarget>,
-    val targetCount: Int,
-    val error: String? = null,
-    val alertsSent: Int = 0
-)
-
+data class CheckOutcome(val checkedAt: Long, val active: List<ActiveTarget>, val targetCount: Int, val error: String? = null, val alertsSent: Int = 0)
 class MonitorException(message: String) : Exception(message)
