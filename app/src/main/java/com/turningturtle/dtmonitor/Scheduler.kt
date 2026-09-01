@@ -10,12 +10,12 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 
 /**
- * Background scheduling for DT Monitor.
+ * Lightweight background scheduling for DT Monitor.
  *
  * A one-shot JobScheduler job is used instead of AlarmManager's repeating alarm.
- * After every successful attempt the job schedules the next one for ~10 minutes.
+ * After each background run, the next job is scheduled for about 10 minutes later.
  * A persistent ConnectivityManager PendingIntent watches for a network becoming
- * available, so a device coming back online can trigger a check immediately.
+ * available so a device coming back online can trigger a check immediately.
  */
 object Scheduler {
     private const val CHECK_JOB_ID = 7410
@@ -23,8 +23,12 @@ object Scheduler {
     private const val INTERVAL_MS = 10L * 60L * 1000L
 
     fun schedule(context: Context) {
-        scheduleNext(context.applicationContext)
-        ensureNetworkWatcher(context.applicationContext)
+        val appContext = context.applicationContext
+        val scheduler = appContext.getSystemService(JobScheduler::class.java)
+        if (scheduler?.getPendingJob(CHECK_JOB_ID) == null) {
+            scheduleNext(appContext)
+        }
+        ensureNetworkWatcher(appContext)
     }
 
     fun scheduleNext(context: Context) {
