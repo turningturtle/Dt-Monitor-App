@@ -8,18 +8,21 @@ class MonitorJobService : JobService() {
     override fun onStartJob(params: JobParameters): Boolean {
         val appContext = applicationContext
         executor.execute {
-            val outcome = try {
-                DtMonitor.check(appContext)
-            } catch (e: Exception) {
-                CheckOutcome(
-                    System.currentTimeMillis(),
-                    emptyList(),
-                    MonitorPrefs.loadTargets(appContext).size,
-                    e.message ?: "Background check failed."
-                )
+            if (MonitorPrefs.tryAcquireBackgroundCheck(appContext)) {
+                val outcome = try {
+                    DtMonitor.check(appContext)
+                } catch (e: Exception) {
+                    CheckOutcome(
+                        System.currentTimeMillis(),
+                        emptyList(),
+                        MonitorPrefs.loadTargets(appContext).size,
+                        e.message ?: "Background check failed."
+                    )
+                }
+                MonitorPrefs.recordOutcome(appContext, outcome, "background timer")
             }
 
-            MonitorPrefs.recordOutcome(appContext, outcome, "background")
+            // Always replace the consumed one-shot job with the next 10-minute job.
             Scheduler.scheduleNext(appContext)
             Scheduler.ensureNetworkWatcher(appContext)
             jobFinished(params, false)
