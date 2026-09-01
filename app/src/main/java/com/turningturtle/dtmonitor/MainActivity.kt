@@ -2,6 +2,7 @@ package com.turningturtle.dtmonitor
 
 import android.app.Activity
 import android.os.Bundle
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -16,6 +17,8 @@ class MainActivity : Activity() {
     private lateinit var webhookInput: EditText
     private lateinit var targetsInput: EditText
     private lateinit var recheckButton: Button
+    private lateinit var editButton: Button
+    private lateinit var saveButton: Button
     private val executor = Executors.newSingleThreadExecutor()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -27,33 +30,52 @@ class MainActivity : Activity() {
         webhookInput = findViewById(R.id.webhookInput)
         targetsInput = findViewById(R.id.targetsInput)
         recheckButton = findViewById(R.id.recheckButton)
-        webhookInput.setText(MonitorPrefs.webhook(this))
-        targetsInput.setText(MonitorPrefs.loadTargets(this).joinToString("\n") { "${it.name},${it.id}" })
+        editButton = findViewById(R.id.editButton)
+        saveButton = findViewById(R.id.saveButton)
+
+        loadSettings()
+        setEditing(false)
         updateLastCheck()
         Scheduler.schedule(this)
-        findViewById<Button>(R.id.saveButton).setOnClickListener { saveSettings() }
+
+        editButton.setOnClickListener { setEditing(true) }
+        saveButton.setOnClickListener { saveSettings() }
         recheckButton.setOnClickListener { runManualCheck() }
+    }
+
+    private fun loadSettings() {
+        webhookInput.setText(MonitorPrefs.webhook(this))
+        targetsInput.setText(MonitorPrefs.loadTargets(this).joinToString("\n") { "${it.name},${it.id}" })
+    }
+
+    private fun setEditing(editing: Boolean) {
+        webhookInput.isEnabled = editing
+        targetsInput.isEnabled = editing
+        editButton.visibility = if (editing) View.GONE else View.VISIBLE
+        saveButton.visibility = if (editing) View.VISIBLE else View.GONE
+        if (editing) webhookInput.requestFocus()
     }
 
     private fun saveSettings() {
         val parsed = parseTargets(targetsInput.text.toString())
         if (parsed.error != null) { resultText.text = parsed.error; return }
+        val webhook = webhookInput.text.toString().trim()
+        if (webhook.isNotEmpty() && !webhook.startsWith("https://discord.com/api/webhooks/") && !webhook.startsWith("https://discordapp.com/api/webhooks/")) {
+            resultText.text = "Webhook must be a Discord webhook URL."; return
+        }
         MonitorPrefs.saveTargets(this, parsed.targets)
-        MonitorPrefs.saveWebhook(this, webhookInput.text.toString())
+        MonitorPrefs.saveWebhook(this, webhook)
         Scheduler.schedule(this)
         resultText.text = "Saved ${parsed.targets.size} server${if (parsed.targets.size == 1) "" else "s"}. Background monitoring is enabled."
         statusText.text = "● Monitoring"
+        setEditing(false)
     }
 
     private fun runManualCheck() {
-        val parsed = parseTargets(targetsInput.text.toString())
-        if (parsed.error != null) { resultText.text = parsed.error; return }
-        MonitorPrefs.saveTargets(this, parsed.targets)
-        MonitorPrefs.saveWebhook(this, webhookInput.text.toString())
         setBusy(true)
         executor.execute {
             val outcome = try { DtMonitor.check(applicationContext) } catch (e: Exception) {
-                CheckOutcome(System.currentTimeMillis(), emptyList(), parsed.targets.size, e.message ?: "Check failed.")
+                CheckOutcome(System.currentTimeMillis(), emptyList(), MonitorPrefs.loadTargets(applicationContext).size, e.message ?: "Check failed.")
             }
             runOnUiThread { renderOutcome(outcome); setBusy(false) }
         }
@@ -61,6 +83,8 @@ class MainActivity : Activity() {
 
     private fun setBusy(busy: Boolean) {
         recheckButton.isEnabled = !busy
+        editButton.isEnabled = !busy
+        saveButton.isEnabled = !busy
         statusText.text = if (busy) "● Checking…" else "● Monitoring"
     }
 
