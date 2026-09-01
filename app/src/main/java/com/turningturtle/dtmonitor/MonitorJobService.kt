@@ -23,8 +23,9 @@ class MonitorJobService : JobService() {
                 MonitorPrefs.recordOutcome(appContext, outcome, source)
             }
 
-            // Always replace the consumed one-shot job with the next 10-minute job.
-            Scheduler.scheduleNext(appContext)
+            // Schedule the successor on the other job ID before finishing this one,
+            // so the scheduler never has to cancel the job that is currently running.
+            Scheduler.scheduleNext(appContext, params.jobId)
             Scheduler.ensureNetworkWatcher(appContext)
             jobFinished(params, false)
         }
