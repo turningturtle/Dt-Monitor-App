@@ -13,12 +13,13 @@ import android.net.NetworkCapabilities
  * Lightweight background scheduling for DT Monitor.
  *
  * A one-shot JobScheduler job is used instead of AlarmManager's repeating alarm.
- * After each background run, the next job is scheduled for about 10 minutes later.
- * A persistent ConnectivityManager PendingIntent watches for a network becoming
- * available so a device coming back online can trigger a check immediately.
+ * The two alternating job IDs let a running job schedule its successor without
+ * cancelling itself. A persistent ConnectivityManager PendingIntent watches for
+ * a network becoming available so a device coming back online can trigger a check.
  */
 object Scheduler {
-    private const val CHECK_JOB_ID = 7410
+    private const val CHECK_JOB_A = 7410
+    private const val CHECK_JOB_B = 7412
     private const val NETWORK_REQUEST_CODE = 7411
     private const val INTERVAL_MS = 10L * 60L * 1000L
     const val EXTRA_SOURCE = "source"
@@ -28,25 +29,41 @@ object Scheduler {
     fun schedule(context: Context) {
         val appContext = context.applicationContext
         val scheduler = appContext.getSystemService(JobScheduler::class.java)
-        if (scheduler?.getPendingJob(CHECK_JOB_ID) == null) {
-            scheduleNext(appContext)
+        val a = scheduler?.getPendingJob(CHECK_JOB_A)
+        val b = scheduler?.getPendingJob(CHECK_JOB_B)
+        if (a == null && b == null) {
+            scheduleNew(context, CHECK_JOB_A, INTERVAL_MS, SOURCE_TIMER)
         }
         ensureNetworkWatcher(appContext)
     }
 
+    /** Used by UI/manual actions: replace any pending timer with a fresh 10-minute timer. */
     fun scheduleNext(context: Context) {
-        scheduleCheck(context, INTERVAL_MS, SOURCE_TIMER)
+        val scheduler = context.getSystemService(JobScheduler::class.java) ?: return
+        scheduler.cancel(CHECK_JOB_A)
+        scheduler.cancel(CHECK_JOB_B)
+        scheduleNew(context, CHECK_JOB_A, INTERVAL_MS, SOURCE_TIMER)
+    }
+
+    /** Used by a running job: schedule the successor on the other job ID. */
+    fun scheduleNext(context: Context, currentJobId: Int) {
+        val nextId = if (currentJobId == CHECK_JOB_A) CHECK_JOB_B else CHECK_JOB_A
+        val scheduler = context.getSystemService(JobScheduler::class.java) ?: return
+        scheduler.cancel(nextId)
+        scheduleNew(context, nextId, INTERVAL_MS, SOURCE_TIMER)
     }
 
     fun scheduleImmediateCheck(context: Context) {
-        scheduleCheck(context, 0L, SOURCE_NETWORK)
+        val scheduler = context.getSystemService(JobScheduler::class.java) ?: return
+        scheduler.cancel(CHECK_JOB_A)
+        scheduler.cancel(CHECK_JOB_B)
+        scheduleNew(context, CHECK_JOB_A, 0L, SOURCE_NETWORK)
     }
 
-    private fun scheduleCheck(context: Context, delayMs: Long, source: String) {
+    private fun scheduleNew(context: Context, jobId: Int, delayMs: Long, source: String) {
         val scheduler = context.getSystemService(JobScheduler::class.java) ?: return
-        scheduler.cancel(CHECK_JOB_ID)
         val component = ComponentName(context, MonitorJobService::class.java)
-        val job = JobInfo.Builder(CHECK_JOB_ID, component)
+        val job = JobInfo.Builder(jobId, component)
             .setMinimumLatency(delayMs)
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
             .setBackoffCriteria(30_000L, JobInfo.BACKOFF_POLICY_EXPONENTIAL)
@@ -72,7 +89,8 @@ object Scheduler {
 
     fun cancel(context: Context) {
         val scheduler = context.getSystemService(JobScheduler::class.java)
-        scheduler?.cancel(CHECK_JOB_ID)
+        scheduler?.cancel(CHECK_JOB_A)
+        scheduler?.cancel(CHECK_JOB_B)
         val connectivity = context.getSystemService(ConnectivityManager::class.java) ?: return
         val intent = Intent(context, NetworkReceiver::class.java).setAction(NetworkReceiver.ACTION_NETWORK_AVAILABLE)
         val pending = PendingIntent.getBroadcast(
