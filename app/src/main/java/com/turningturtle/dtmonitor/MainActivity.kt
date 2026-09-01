@@ -40,7 +40,6 @@ class MainActivity : Activity() {
         loadSettings()
         setEditing(webhookInput, editWebhookButton, saveWebhookButton, false)
         setEditing(targetsInput, editTargetsButton, saveTargetsButton, false)
-        updateLastCheck()
         Scheduler.schedule(this)
 
         editWebhookButton.setOnClickListener { setEditing(webhookInput, editWebhookButton, saveWebhookButton, true) }
@@ -48,11 +47,24 @@ class MainActivity : Activity() {
         editTargetsButton.setOnClickListener { setEditing(targetsInput, editTargetsButton, saveTargetsButton, true) }
         saveTargetsButton.setOnClickListener { saveTargets() }
         recheckButton.setOnClickListener { runManualCheck() }
+        refreshLastState()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshLastState()
+        Scheduler.schedule(this)
     }
 
     private fun loadSettings() {
         webhookInput.setText(MonitorPrefs.webhook(this))
         targetsInput.setText(MonitorPrefs.loadTargets(this).joinToString("\n") { "${it.name},${it.id}" })
+    }
+
+    private fun refreshLastState() {
+        statusText.text = "● Monitoring"
+        updateLastCheck()
+        resultText.text = MonitorPrefs.lastResult(this)
     }
 
     private fun setEditing(input: EditText, edit: Button, save: Button, editing: Boolean) {
@@ -85,8 +97,16 @@ class MainActivity : Activity() {
         setBusy(true)
         executor.execute {
             val outcome = try { DtMonitor.check(applicationContext) } catch (e: Exception) {
-                CheckOutcome(System.currentTimeMillis(), emptyList(), MonitorPrefs.loadTargets(applicationContext).size, e.message ?: "Check failed.")
+                CheckOutcome(
+                    System.currentTimeMillis(),
+                    emptyList(),
+                    MonitorPrefs.loadTargets(applicationContext).size,
+                    e.message ?: "Check failed."
+                )
             }
+            MonitorPrefs.recordOutcome(applicationContext, outcome, "manual")
+            Scheduler.scheduleNext(applicationContext)
+            Scheduler.ensureNetworkWatcher(applicationContext)
             runOnUiThread { renderOutcome(outcome); setBusy(false) }
         }
     }
@@ -101,7 +121,6 @@ class MainActivity : Activity() {
     }
 
     private fun renderOutcome(outcome: CheckOutcome) {
-        MonitorPrefs.setLastCheck(this, outcome.checkedAt)
         updateLastCheck()
         if (outcome.error != null) {
             statusText.text = "● Check needs attention"
@@ -122,7 +141,13 @@ class MainActivity : Activity() {
 
     private fun updateLastCheck() {
         val time = MonitorPrefs.lastCheck(this)
-        lastCheckText.text = if (time == 0L) "Last check: Never" else "Last check: ${DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(time))}"
+        val source = MonitorPrefs.lastSource(this)
+        lastCheckText.text = if (time == 0L) {
+            "Last check: Never"
+        } else {
+            val suffix = if (source.isBlank()) "" else " • $source"
+            "Last check: ${DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(time))}$suffix"
+        }
     }
 
     private fun parseTargets(text: String): ParseResult {
