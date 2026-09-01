@@ -64,14 +64,33 @@
                 android:textSize="15sp" />
         </LinearLayout>
 
-        <TextView
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
-            android:text="Webhook"
-            android:textColor="#17171C"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+            android:gravity="center_vertical">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Webhook"
+                android:textColor="#17171C"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+            <Button
+                android:id="@+id/editButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Edit"
+                android:textAllCaps="false" />
+            <Button
+                android:id="@+id/saveButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Save"
+                android:textAllCaps="false"
+                android:visibility="gone" />
+        </LinearLayout>
 
         <EditText
             android:id="@+id/webhookInput"
@@ -115,13 +134,13 @@
             android:scrollbars="vertical"
             android:textSize="14sp" />
 
-        <Button
-            android:id="@+id/saveButton"
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="Save settings"
-            android:textAllCaps="false" />
+            android:layout_marginTop="16dp"
+            android:text="Use Edit above to change the webhook or server list. Changes only take effect after Save."
+            android:textColor="#777780"
+            android:textSize="12sp" />
 
         <TextView
             android:id="@+id/resultText"
