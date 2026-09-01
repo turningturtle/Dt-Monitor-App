@@ -1,16 +1,15 @@
 package com.turningturtle.dtmonitor
 
+import android.app.Activity
 import android.os.Bundle
-import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
 import java.text.DateFormat
 import java.util.Date
 import java.util.concurrent.Executors
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : Activity() {
     private lateinit var statusText: TextView
     private lateinit var lastCheckText: TextView
     private lateinit var resultText: TextView
@@ -28,22 +27,17 @@ class MainActivity : AppCompatActivity() {
         webhookInput = findViewById(R.id.webhookInput)
         targetsInput = findViewById(R.id.targetsInput)
         recheckButton = findViewById(R.id.recheckButton)
-
         webhookInput.setText(MonitorPrefs.webhook(this))
         targetsInput.setText(MonitorPrefs.loadTargets(this).joinToString("\n") { "${it.name},${it.id}" })
         updateLastCheck()
         Scheduler.schedule(this)
-
         findViewById<Button>(R.id.saveButton).setOnClickListener { saveSettings() }
         recheckButton.setOnClickListener { runManualCheck() }
     }
 
     private fun saveSettings() {
         val parsed = parseTargets(targetsInput.text.toString())
-        if (parsed.error != null) {
-            resultText.text = parsed.error
-            return
-        }
+        if (parsed.error != null) { resultText.text = parsed.error; return }
         MonitorPrefs.saveTargets(this, parsed.targets)
         MonitorPrefs.saveWebhook(this, webhookInput.text.toString())
         Scheduler.schedule(this)
@@ -98,22 +92,19 @@ class MainActivity : AppCompatActivity() {
     private fun parseTargets(text: String): ParseResult {
         val targets = mutableListOf<Target>()
         val seen = HashSet<String>()
-        text.lines().mapIndexed { index, line -> index + 1 to line.trim() }.forEach { (lineNumber, line) ->
-            if (line.isEmpty()) return@forEach
+        text.lines().forEachIndexed { index, raw ->
+            val line = raw.trim()
+            if (line.isEmpty()) return@forEachIndexed
             val comma = line.indexOf(',')
-            if (comma <= 0 || comma == line.lastIndex) return ParseResult(emptyList(), "Line $lineNumber must be: Server Name,Server ID")
+            if (comma <= 0 || comma == line.lastIndex) return ParseResult(emptyList(), "Line ${index + 1} must be: Server Name,Server ID")
             val name = line.substring(0, comma).trim()
             val id = line.substring(comma + 1).trim()
-            if (name.isEmpty() || !id.matches(Regex("\\d{15,22}"))) return ParseResult(emptyList(), "Line $lineNumber has an invalid server ID.")
+            if (name.isEmpty() || !id.matches(Regex("\\d{15,22}"))) return ParseResult(emptyList(), "Line ${index + 1} has an invalid server ID.")
             if (seen.add(id)) targets.add(Target(name, id))
         }
         return ParseResult(targets, null)
     }
 
-    override fun onDestroy() {
-        executor.shutdownNow()
-        super.onDestroy()
-    }
-
+    override fun onDestroy() { executor.shutdownNow(); super.onDestroy() }
     private data class ParseResult(val targets: List<Target>, val error: String?)
 }
