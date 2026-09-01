@@ -21,6 +21,9 @@ object Scheduler {
     private const val CHECK_JOB_ID = 7410
     private const val NETWORK_REQUEST_CODE = 7411
     private const val INTERVAL_MS = 10L * 60L * 1000L
+    const val EXTRA_SOURCE = "source"
+    const val SOURCE_TIMER = "background timer"
+    const val SOURCE_NETWORK = "internet connected"
 
     fun schedule(context: Context) {
         val appContext = context.applicationContext
@@ -32,13 +35,22 @@ object Scheduler {
     }
 
     fun scheduleNext(context: Context) {
+        scheduleCheck(context, INTERVAL_MS, SOURCE_TIMER)
+    }
+
+    fun scheduleImmediateCheck(context: Context) {
+        scheduleCheck(context, 0L, SOURCE_NETWORK)
+    }
+
+    private fun scheduleCheck(context: Context, delayMs: Long, source: String) {
         val scheduler = context.getSystemService(JobScheduler::class.java) ?: return
         scheduler.cancel(CHECK_JOB_ID)
         val component = ComponentName(context, MonitorJobService::class.java)
         val job = JobInfo.Builder(CHECK_JOB_ID, component)
-            .setMinimumLatency(INTERVAL_MS)
+            .setMinimumLatency(delayMs)
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
             .setBackoffCriteria(30_000L, JobInfo.BACKOFF_POLICY_EXPONENTIAL)
+            .setTransientExtras(android.os.PersistableBundle().apply { putString(EXTRA_SOURCE, source) })
             .build()
         scheduler.schedule(job)
     }
